@@ -1,5 +1,6 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+from spotipy.client import SpotifyException
 from dotenv import load_dotenv
 import os
 from colorthief import ColorThief
@@ -69,7 +70,7 @@ async def LED():
             old_track_id = None
             while True:
                 current_track = sp.current_playback()
-
+                
                 if(current_track['currently_playing_type']=="episode"):
                     episode = sp.current_playback(additional_types="episode")
                     current_track = episode
@@ -79,6 +80,15 @@ async def LED():
                     clr = color(current_track)
                     await change_led_color(clr,current_track,client)
                     old_track_id = current_track_id
+                await asyncio.sleep(2)
+    except SpotifyException as se: 
+        if(se.http_status == 429):
+            sleep_time = se.headers.get("Retry-After")
+            print(f'Rate limited, wait {sleep_time}s')
+            await asyncio.sleep(sleep_time)
+        else:
+            print(f'Spotify exception: {se}')
+
     except Exception as e:
         print("Unexpected error: ",e,"\nMake sure Spotify is open and No other device is connected to the LED's")
 
