@@ -1,0 +1,4 @@
+bleak
+spotipy
+colorthief
+urllib3
