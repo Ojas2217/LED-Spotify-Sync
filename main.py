@@ -17,27 +17,26 @@ ADDRESS = os.getenv("LED_MAC_ADDRESS")
 CHAR = os.getenv("LED_UUID")
 
 
-def color(track):
-    if(track['currently_playing_type']=="track"):
-        cover = track['item']['album']['images'][-1]['url']
-    else:   
-        cover = track['item']['images'][-1]['url']        
+def color(cover):    
     file = urlopen(cover)
     f = io.BytesIO(file.read())
     ct = ColorThief(f)
     dominant_color = ct.get_color(quality=1)
 
-    return dominant_color
+    return normalize(dominant_color)
 
 # Attempts to brighten high channels, and dim lower ones.
 # Use this if you have cheap led's (like mine) which don't respond well to certain rgb combinations
 def normalize(color):
-    color = list(color)
-    maxi = color.index(max(color))
-    mini = color.index(min(color))
     r,g,b = color
     if(r==g==b):
         return color
+    
+    color = list(color)
+    maxi = color.index(max(color))
+    mini = color.index(min(color))
+    
+
     if(r==g):
         if(color[maxi]==r):
             return min(255,r+b),min(255,g+b),0
@@ -56,11 +55,10 @@ def normalize(color):
     else:
         color[maxi] = min(255,color[maxi]+color[mini])
         color[mini] = 0
-        return color
+        return tuple(color)
     
-async def change_led_color(color,track,client):
-    r, g, b = normalize(color)
-    print("Now Playing:", track['item']['name'],", Changing color to:",(r,g,b))
+async def change_led_color(color,client):
+    r, g, b = color
     data = bytes.fromhex(f"69960502{r:02X}{g:02X}{b:02X}FF") #BLE Command pattern: different string of bytes for different microcontrollers
     await client.write_gatt_char(CHAR, data,response=False)
 
@@ -74,13 +72,17 @@ async def LED():
                 if(current_track['currently_playing_type']=="episode"):
                     episode = sp.current_playback(additional_types="episode")
                     current_track = episode
+                    cover = current_track['item']['images'][-1]['url']    
+                else:
+                    cover = current_track['item']['album']['images'][-1]['url']
 
                 current_track_id = current_track['item']['id']
                 if(current_track_id != old_track_id):
-                    clr = color(current_track)
-                    await change_led_color(clr,current_track,client)
+                    clr = color(cover)
+                    print("Now Playing:", current_track['item']['name'],", Changing color to:",clr)
+                    await change_led_color(clr,client)
                     old_track_id = current_track_id
-                await asyncio.sleep(2)
+                await asyncio.sleep(0.5)
     except SpotifyException as se: 
         if(se.http_status == 429):
             sleep_time = se.headers.get("Retry-After")
